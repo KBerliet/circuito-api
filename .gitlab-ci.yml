@@ -1,0 +1,51 @@
+# dispara o pipeline tanto em push quanto em merge request
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+stages:
+  - build
+  - test
+  - lint
+
+default:
+  image: python:3.11-slim
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .cache/pip
+    - venv/
+
+# instala as dependencias do projeto
+build:
+  stage: build
+  script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  artifacts:
+    paths:
+      - venv/
+    expire_in: 1 hour
+
+# roda os testes, o pipeline quebra se algum falhar
+test:
+  stage: test
+  needs: ["build"]
+  script:
+    - source venv/bin/activate
+    - pytest -v
+
+# roda o flake8 pra checar o estilo do codigo
+lint:
+  stage: lint
+  needs: ["build"]
+  script:
+    - source venv/bin/activate
+    - flake8 app tests
