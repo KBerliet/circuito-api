@@ -73,3 +73,26 @@ def get_driver(driver_id: int, db: Session = Depends(get_db)):
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
     return driver
+
+# Bloco de corridas
+
+@app.post("/races", response_model=schemas.RaceOut, status_code=201, tags=["Races"])
+def create_race(race: schemas.RaceCreate, db: Session = Depends(get_db)):
+    db_race = models.Race(**race.model_dump())
+    db.add(db_race)
+    db.commit()
+    db.refresh(db_race)
+    return db_race
+
+
+@app.get("/races", response_model=List[schemas.RaceOut], tags=["Races"])
+def list_races(db: Session = Depends(get_db)):
+    return db.query(models.Race).all()
+
+
+@app.get("/races/{race_id}", response_model=schemas.RaceOut, tags=["Races"])
+def get_race(race_id: int, db: Session = Depends(get_db)):
+    race = db.query(models.Race).filter(models.Race.id == race_id).first()
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    return race
