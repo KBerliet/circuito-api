@@ -2,12 +2,15 @@
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH"
 
 stages:
   - build
   - test
   - lint
+  - docker-build
+  - docker-push
+  - deploy
 
 default:
   image: python:3.11-slim
@@ -49,3 +52,54 @@ lint:
   script:
     - source venv/bin/activate
     - flake8 app tests
+
+docker-build:
+  stage: docker-build
+  image: docker:24
+  services:
+    - docker:24-dind
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker save $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+# Publica a imagem no GitLab Container Registry
+docker-push:
+  stage: docker-push
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs: ["docker-build"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - docker load -i image.tar
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+# Conecta na EC2 via SSH e atualiza a aplicacao rodando
+deploy:
+  stage: deploy
+  image: alpine:latest
+  needs: ["docker-push"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+  script:
+    - ssh -i ~/.ssh/id_ed25519 $EC2_USER@$EC2_HOST "
+      echo \"$CI_REGISTRY_PASSWORD\" | docker login -u \"$CI_REGISTRY_USER\" --password-stdin $CI_REGISTRY &&
+      docker pull $CI_REGISTRY_IMAGE:latest &&
+      cd ~/circuito-api && docker compose up -d
+      "
