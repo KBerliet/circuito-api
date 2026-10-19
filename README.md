@@ -1,83 +1,87 @@
 # Circuito API — Gestão de Campeonato de F1
 
 API REST para gerenciar um campeonato de Fórmula 1: equipes, pilotos, corridas e resultados.
+Projeto da disciplina de Cloud Computing, com foco em **CI/CD**: testes automatizados,
+containerização com Docker e deploy automático na AWS.
 
-Projeto da disciplina de Cloud Computing — Fase 1 (Versionamento e Integração Contínua).
+## Tecnologias
 
-## Descrição
+- Python 3.11, FastAPI, SQLAlchemy
+- PostgreSQL 16 (produção) e SQLite (testes)
+- Docker e Docker Compose
+- Pytest e Flake8
+- GitLab CI/CD, GitLab Container Registry
+- AWS EC2 (Ubuntu)
 
-A API representa um domínio único e coerente — a gestão de um campeonato de F1:
+## Arquitetura
 
-- **Equipes (`/teams`)** — cadastro das escuderias da temporada
-- **Pilotos (`/drivers`)** — cadastrados e vinculados a uma equipe
-- **Corridas (`/races`)** — etapas do calendário
-- **Resultados (`/results`)** — classificação de um piloto em uma corrida, com posição e pontos
+```
+git push (main) -> GitLab CI/CD -> imagem Docker -> GitLab Container Registry
+                                                  -> deploy via SSH -> AWS EC2
+                                                       (API + PostgreSQL em containers)
+```
 
-## Tecnologias utilizadas
-
-- Python 3.11
-- FastAPI
-- SQLAlchemy (ORM)
-- SQLite (banco de dados relacional usado em desenvolvimento e testes)
-- Pytest (testes automatizados)
-- Flake8 (lint)
-- GitLab CI/CD
-
-## Como rodar o projeto localmente
+## Como rodar com Docker
 
 ```bash
-# clonar o repositório
-git clone <URL_DO_REPOSITORIO>
-cd f1-cicd-project
+git clone https://github.com/KBerliet/circuito-api.git
+cd circuito-api
+docker compose up --build
+```
 
-# criar e ativar o ambiente virtual
+A API fica em `http://localhost:8000` e a documentação interativa em `http://localhost:8000/docs`.
+
+> A senha do PostgreSQL no `docker-compose.yml` é apenas um valor de exemplo para
+> desenvolvimento. Em produção, use variáveis de ambiente.
+
+## Como rodar sem Docker
+
+```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/Mac
-
-# instalar as dependências
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# rodar a aplicação
 uvicorn app.main:app --reload
 ```
 
-A API fica disponível em `http://127.0.0.1:8000`, com documentação interativa em `http://127.0.0.1:8000/docs`.
+Sem a variável `DATABASE_URL`, a aplicação usa SQLite local.
 
-## Rodando os testes
+## Testes e lint
 
 ```bash
 pytest -v
-```
-
-## Rodando o lint
-
-```bash
 flake8 app tests
 ```
 
+São 32 testes cobrindo sucesso, erros de validação (400/422) e recurso não encontrado (404).
+
 ## Endpoints
 
-| Método | Rota                    | Descrição                                        |
-| ------ | ----------------------- | ------------------------------------------------ |
-| GET    | /health                 | Healthcheck da aplicação                         |
-| POST   | /teams                  | Cria uma equipe                                  |
-| GET    | /teams                  | Lista todas as equipes                           |
-| GET    | /teams/{id}             | Busca uma equipe por id                          |
-| POST   | /drivers                | Cria um piloto (vinculado a uma equipe)          |
-| GET    | /drivers                | Lista todos os pilotos                           |
-| GET    | /drivers/{id}           | Busca um piloto por id                           |
-| POST   | /races                  | Cria uma corrida                                 |
-| GET    | /races                  | Lista todas as corridas                          |
-| GET    | /races/{id}             | Busca uma corrida por id                         |
-| POST   | /results                | Registra o resultado de um piloto em uma corrida |
-| GET    | /results                | Lista todos os resultados                        |
-| GET    | /results/race/{race_id} | Lista os resultados de uma corrida específica    |
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | /health | Healthcheck |
+| POST / GET | /teams | Cria / lista equipes |
+| GET | /teams/{id} | Busca equipe |
+| POST / GET | /drivers | Cria / lista pilotos |
+| GET | /drivers/{id} | Busca piloto |
+| POST / GET | /races | Cria / lista corridas |
+| GET | /races/{id} | Busca corrida |
+| POST / GET | /results | Registra / lista resultados |
+| GET | /results/race/{id} | Resultados de uma corrida |
 
-## Pipeline de CI
+## Pipeline de CI/CD
 
-O `.gitlab-ci.yml` roda automaticamente a cada push e a cada Merge Request, com 3 estágios:
+Definido em `.gitlab-ci.yml` (o pipeline roda no GitLab, não no GitHub):
 
-1. **build** — instala as dependências
-2. **test** — executa os 32 testes automatizados com pytest
-3. **lint** — valida o estilo do código com flake8
+1. **build**: instala as dependências
+2. **test**: roda o pytest
+3. **lint**: roda o flake8
+4. **docker-build**: constrói a imagem Docker
+5. **docker-push**: publica a imagem no GitLab Container Registry
+6. **deploy**: atualiza os containers na instância EC2 via SSH
+
+Os estágios 4 a 6 rodam apenas na branch `main`. Credenciais ficam em variáveis protegidas de CI/CD.
+
+## Observação
+
+Parte do código foi desenvolvida com apoio de IA (Claude). Todo o processo de execução, teste,
+depuração e deploy foi realizado manualmente pelo autor.
