@@ -1,0 +1,11 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+*.db
+.env
+*.pem
+gitlab_deploy_key*
+image.tar
